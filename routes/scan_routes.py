@@ -1,105 +1,152 @@
 import asyncio
 import logging
-from flask import Blueprint, request, jsonify
+from datetime import datetime, timezone
+
+from flask import Blueprint, request, jsonify, current_app
+
 from database.mongo_connection import get_collection
 from models.scan_model import ScanResult
-from services.pattern_detector import detect_patterns
 from services.async_api_checker import run_api_checks
+from services.pattern_detector import detect_patterns, classify_input
 from services.trust_score_engine import calculate_score
 from services.advice_generator import generate_advice
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 scan_bp = Blueprint("scan", __name__)
 
-VALID_SCAN_TYPES = ["url", "phone", "email"]
 
-
-# ── Route 1: Health Check ────────────────────────────────────
-@scan_bp.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok"}), 200
-
-
-# ── Route 2: Get Past Reports ────────────────────────────────
-@scan_bp.route("/report", methods=["GET"])
-def get_report():
+def _run_async(coro):
+    """
+    Safely run a coroutine from a synchronous Flask route.
+    nest_asyncio (applied in app.py) makes asyncio.run() safe to call
+    even when a background event loop is already running.
+    """
     try:
-        collection = get_collection("scans")
-        
-        scan_type = request.args.get("scan_type")
-        limit = int(request.args.get("limit", 20))
-        
-        query = {}
-        if scan_type:
-            if scan_type not in VALID_SCAN_TYPES:
-                return jsonify({"error": "Invalid scan_type"}), 400
-            query["scan_type"] = scan_type
-        
-        results = list(
-            collection.find(query, {"_id": 0})
-            .sort("created_at", -1)
-            .limit(limit)
-        )
-        
-        return jsonify({"count": len(results), "results": results}), 200
-        
-    except Exception as e:
-        logger.error(f"Report error: {e}")
-        return jsonify({"error": "Failed to fetch report"}), 500
+        return asyncio.run(coro)
+    except RuntimeError:
+        # Fallback: create a brand-new event loop if asyncio.run() fails
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
 
-# ── Route 3: Main Scan ───────────────────────────────────────
+# ── /scan ──────────────────────────────────────────────────────────────────────
+
 @scan_bp.route("/scan", methods=["POST"])
 def scan():
+    """
+    Main scan endpoint.
+
+    1. Validate the incoming payload.
+    2. Check MongoDB cache — return immediately on hit.
+    3. Run async external API checks + pattern detection in parallel.
+    4. Calculate trust score and generate advice.
+    5. Persist result to MongoDB and return to client.
+    """
+    payload = request.get_json(silent=True)
+    if not payload or "input" not in payload:
+        return jsonify({"error": "Missing required field: 'input'"}), 400
+
+    raw_input: str = str(payload["input"]).strip()
+    if not raw_input:
+        return jsonify({"error": "'input' field must not be empty"}), 400
+
+    # ── 1. Classify input type ─────────────────────────────────────────────────
+    input_type: str = classify_input(raw_input)
+    logger.info("Scan request — type=%s input=%s", input_type, raw_input)
+
+    # ── 2. Cache lookup ────────────────────────────────────────────────────────
+    cache_col = get_collection(current_app.config["COLLECTION_CACHED"])
+    cached = cache_col.find_one({"input": raw_input})
+    if cached:
+        logger.info("Cache HIT for input=%s", raw_input)
+        result = ScanResult.from_mongo(cached)
+        return jsonify(result.to_response()), 200
+
+    # ── 3. External API checks (async, parallel) ───────────────────────────────
     try:
-        # 1. Get input
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Request body must be JSON"}), 400
-        
-        target = data.get("target", "").strip()
-        scan_type = data.get("scan_type", "").strip().lower()
-        
-        # 2. Validate
-        if not target:
-            return jsonify({"error": "target is required"}), 400
-        if not scan_type:
-            return jsonify({"error": "scan_type is required"}), 400
-        if scan_type not in VALID_SCAN_TYPES:
-            return jsonify({"error": f"scan_type must be one of {VALID_SCAN_TYPES}"}), 400
-        
-        # 3. Check cache
-        collection = get_collection("scans")
-        existing = collection.find_one(
-            {"target": target, "scan_type": scan_type},
-            {"_id": 0}
+        api_results: dict = _run_async(
+            run_api_checks(raw_input, input_type, current_app.config)
         )
-        if existing:
-            return jsonify({"cached": True, "result": existing}), 200
-        
-        # 4. Run analysis
-        patterns = detect_patterns(target, scan_type)
-        api_results = asyncio.run(run_api_checks(target, scan_type))
-        score, level = calculate_score(patterns, api_results)
-        advice = generate_advice(score, patterns, api_results)
-        
-        # 5. Build result
-        result = ScanResult(
-            target=target,
-            scan_type=scan_type,
-            trust_score=score,
-            risk_level=level,
-            pattern_flags=patterns,  
-            advice=advice
-            )
-        
-        
-        # 6. Save to MongoDB
-        collection.insert_one(result.to_dict())
-        
-        # 7. Return response
-        return jsonify({"cached": False, "result": result.to_dict()}), 201
-        
-    except Exception as e:
-        logger.error(f"Scan error: {e}")
-        return jsonify({"error": "Scan failed"}), 500
+    except Exception as exc:
+        logger.error("API checks failed for %s: %s", raw_input, exc)
+        api_results = {}
+
+    # ── 4. Pattern detection ───────────────────────────────────────────────────
+    pattern_flags: list[str] = detect_patterns(raw_input, input_type)
+
+    # ── 5. Check known-scams collection ───────────────────────────────────────
+    known_scams_col = get_collection(current_app.config["COLLECTION_KNOWN_SCAMS"])
+    in_known_scams: bool = known_scams_col.count_documents(
+        {"value": raw_input}, limit=1
+    ) > 0
+
+    # ── 6. Trust score + advice ────────────────────────────────────────────────
+    trust_score, risk_level = calculate_score(
+        api_results, pattern_flags, input_type, in_known_scams
+    )
+    advice: list[str] = generate_advice(risk_level, input_type, pattern_flags)
+
+    # ── 7. Build result object ─────────────────────────────────────────────────
+    result = ScanResult(
+        input=raw_input,
+        type=input_type,
+        trust_score=trust_score,
+        risk_level=risk_level,
+        api_results=api_results,
+        pattern_flags=pattern_flags,
+        advice=advice,
+    )
+
+    # ── 8. Persist to cache ────────────────────────────────────────────────────
+    try:
+        cache_col.update_one(
+            {"input": raw_input},
+            {"$set": result.to_dict()},
+            upsert=True,
+        )
+    except Exception as exc:
+        logger.warning("Failed to cache result for %s: %s", raw_input, exc)
+
+    return jsonify(result.to_response()), 200
+
+
+# ── /report ────────────────────────────────────────────────────────────────────
+
+@scan_bp.route("/report", methods=["POST"])
+def report():
+    """
+    Accept a user-submitted report of a suspicious input.
+    Stored in the `user_reports` collection for review / future analysis.
+    """
+    payload = request.get_json(silent=True)
+    if not payload or "input" not in payload:
+        return jsonify({"error": "Missing required field: 'input'"}), 400
+
+    raw_input: str = str(payload["input"]).strip()
+    if not raw_input:
+        return jsonify({"error": "'input' field must not be empty"}), 400
+
+    report_doc = {
+        "input": raw_input,
+        "type": classify_input(raw_input),
+        "reason": payload.get("reason", ""),
+        "reporter_ip": request.remote_addr,
+        "timestamp": datetime.now(timezone.utc),
+    }
+
+    reports_col = get_collection(current_app.config["COLLECTION_USER_REPORTS"])
+    reports_col.insert_one(report_doc)
+
+    logger.info("User report received for input=%s", raw_input)
+    return jsonify({"message": "Report submitted. Thank you for helping keep the web safe."}), 201
+
+
+# ── /health ────────────────────────────────────────────────────────────────────
+
+@scan_bp.route("/health", methods=["GET"])
+def health():
+    """Simple liveness probe used by load-balancers and monitoring tools."""
+    return jsonify({"status": "ok"}), 200
