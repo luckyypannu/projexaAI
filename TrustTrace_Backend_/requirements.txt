@@ -1,0 +1,25 @@
+# CyberTrust Backend — Python dependencies
+# Install with: pip install -r requirements.txt
+
+# Web framework
+flask==3.0.3
+flask-cors==4.0.1
+
+# MongoDB driver
+pymongo==4.7.3
+
+# Async HTTP client (for parallel API calls)
+aiohttp==3.9.5
+
+# Background scheduler (24-hour data ingestion job)
+APScheduler==3.10.4
+
+# FIX: allows asyncio.run() inside a sync Flask route while APScheduler
+# runs its own background event loop — prevents RuntimeError.
+nest-asyncio==1.6.0
+
+# Environment variable management
+python-dotenv==1.0.1
+
+# Production WSGI server (use instead of Flask dev server in production)
+gunicorn==22.0.0

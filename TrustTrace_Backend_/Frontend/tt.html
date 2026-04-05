@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>TrustTrace – Online Scam Detection System</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="tt.css">
+</head>
+
+<body>
+
+<header>
+<div class="logo">TrustTrace<span class="logo-dot"></span></div>
+</header>
+
+<section class="hero">
+
+<div class="badge">🛡️ Scam Detection System</div>
+
+<h1>
+Is it safe? <br>
+<span>Let's find out.</span>
+</h1>
+
+<p>
+Check website URLs or phone numbers to verify their trust score and risk level instantly.
+</p>
+
+</section>
+
+
+<div class="main-wrapper">
+
+<div class="card">
+
+<div class="type-label">What are you checking?</div>
+
+<div class="type-toggle">
+
+<button class="type-btn active" id="btn-url" onclick="setType('url')">
+🔗 Website URL
+</button>
+
+<button class="type-btn" id="btn-phone" onclick="setType('phone')">
+📞 Phone Number
+</button>
+
+</div>
+
+
+<div class="input-wrap">
+
+<input
+type="text"
+id="main-input"
+placeholder="Enter website URL (e.g., example.com)"
+autocomplete="off"
+/>
+
+</div>
+
+<div class="error-msg" id="error-msg"></div>
+
+<button class="btn-check" id="check-btn" onclick="handleCheck()">
+Check Trust →
+</button>
+
+
+<div class="loading" id="loading">
+
+<div class="spinner"></div>
+<span>Analyzing… this may take a moment</span>
+
+</div>
+
+
+<div class="error-box" id="api-error">
+⚠️ Unable to analyze. Please try again later.
+</div>
+
+
+<div class="result-section" id="result-section">
+
+<div class="result-divider"></div>
+
+<div class="score-wrap">
+
+<div class="score-ring">
+
+<svg width="80" height="80" viewBox="0 0 80 80">
+
+<circle class="bg" cx="40" cy="40" r="33"></circle>
+
+<circle
+class="fg"
+id="ring-fg"
+cx="40"
+cy="40"
+r="33"
+stroke-dasharray="207.3"
+stroke-dashoffset="207.3">
+</circle>
+
+</svg>
+
+<div class="score-num" id="score-num">0</div>
+
+</div>
+
+
+<div class="score-info">
+
+<div class="trust-label" id="trust-label"></div>
+
+<h3 id="result-title"></h3>
+
+<p id="result-subtitle"></p>
+
+</div>
+
+</div>
+
+
+<div class="progress-bar-wrap">
+
+<div class="progress-bar-track">
+
+<div class="progress-bar-fill" id="progress-fill"></div>
+
+</div>
+
+</div>
+
+
+<div class="indicators-title">Risk Indicators</div>
+
+<div class="indicators-list" id="indicators-list"></div>
+
+<div class="explanation" id="explanation"></div>
+
+<button class="btn-reset" onclick="resetForm()">↩ Check Another</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+<footer>
+Built for safety & trust.
+<span>TrustTrace</span> — Online Scam Detection System
+</footer>
+
+
+<script src="script.js"></script>
+</body>
+</html>
