@@ -1,3 +1,12 @@
+"""
+services/advice_generator.py
+
+Generates contextual, actionable advice messages based on:
+  - Risk level (Low / Medium / High)
+  - Input type (url / phone / email)
+  - Specific pattern flags that were detected
+"""
+
 from __future__ import annotations
 
 

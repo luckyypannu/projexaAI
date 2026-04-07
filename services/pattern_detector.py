@@ -1,246 +1,240 @@
+"""
+services/pattern_detector.py
+
+Responsibilities:
+1. classify_input()  — detect input type (url, phone, email)
+2. detect_patterns() — apply heuristic detection rules
+
+Features:
+- Robust regex classification
+- Phishing / scam heuristics
+- Typosquatting detection
+- Safe parsing + debug logging
+"""
+
 from __future__ import annotations
 
 import re
+import logging
 from urllib.parse import urlparse
 
+logger = logging.getLogger(__name__)
 
-# ── Input classification ───────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Input Classification
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Regex patterns for classification (order matters — URL check last so that
-# URLs containing @ are not misidentified as email addresses).
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", re.IGNORECASE)
 _PHONE_RE = re.compile(r"^\+?[\d\s\-().]{7,20}$")
 
 
 def classify_input(raw: str) -> str:
     """
-    Return "email", "phone", or "url" for the given raw input string.
-    Defaults to "url" if none of the more specific patterns match.
+    Classify input into: email, phone, or url.
     """
-    if _EMAIL_RE.match(raw):
-        return "email"
-    if _PHONE_RE.match(raw):
-        return "phone"
+    try:
+        if _EMAIL_RE.match(raw):
+            return "email"
+        if _PHONE_RE.match(raw):
+            return "phone"
+    except Exception as e:
+        logger.warning("Classification failed: %s", e)
+
     return "url"
 
 
-# ── Shared helpers ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _extract_domain(raw: str) -> str:
-    """Return the netloc (hostname) portion of a URL or email domain."""
-    if "://" not in raw:
-        raw = "http://" + raw
-    return urlparse(raw).netloc.lower().lstrip("www.")
+    """Extract domain safely."""
+    try:
+        if "://" not in raw:
+            raw = "http://" + raw
+        return urlparse(raw).netloc.lower().lstrip("www.")
+    except Exception:
+        return raw.lower()
 
 
-# ── URL / Domain patterns ──────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# URL Detection
+# ──────────────────────────────────────────────────────────────────────────────
 
-# TLDs that are disproportionately abused for phishing/spam
-_SUSPICIOUS_TLDS: set[str] = {
+_SUSPICIOUS_TLDS = {
     ".xyz", ".top", ".club", ".online", ".site", ".icu",
-    ".tk", ".ml", ".ga", ".cf", ".gq",      # Free Freenom TLDs
+    ".tk", ".ml", ".ga", ".cf", ".gq",
     ".cc", ".pw", ".ws",
 }
 
-# Keywords in domains frequently used to impersonate legitimate services
-_PHISHING_KEYWORDS: set[str] = {
-    "login", "verify", "secure", "update", "confirm", "account",
-    "signin", "banking", "password", "support", "help", "service",
-    "paypal", "apple", "amazon", "google", "microsoft", "netflix",
-    "facebook", "instagram", "twitter",
+_PHISHING_KEYWORDS = {
+    "login", "verify", "secure", "update", "confirm",
+    "account", "signin", "banking", "password",
 }
 
-# Common brand names that scammers typosquat
-_BRAND_NAMES: set[str] = {
+_BRAND_NAMES = {
     "paypal", "apple", "amazon", "google", "microsoft",
-    "netflix", "facebook", "instagram", "twitter", "ebay",
-    "wellsfargo", "chase", "barclays", "hsbc",
+    "netflix", "facebook", "instagram", "twitter",
 }
 
-# Characters used to visually mimic Latin letters (simple homoglyph map)
-_HOMOGLYPHS: dict[str, str] = {
+_HOMOGLYPHS = {
     "0": "o", "1": "l", "3": "e", "4": "a",
-    "5": "s", "6": "b", "7": "t", "@": "a",
+    "5": "s", "7": "t", "@": "a",
 }
 
 
 def _normalize_domain(domain: str) -> str:
-    """Replace common homoglyphs so that paypa1 → paypal."""
-    result = domain
     for fake, real in _HOMOGLYPHS.items():
-        result = result.replace(fake, real)
-    return result
+        domain = domain.replace(fake, real)
+    return domain
 
 
 def _is_typosquat(domain: str) -> bool:
-    """
-    Heuristic typosquatting check:
-    - Normalise homoglyphs, strip TLD, and test against known brand names.
-    - Also flag domains that *contain* a brand name but are not the official site.
-    """
-    base = re.sub(r"\.[^.]+$", "", domain)   # remove TLD
-    normalised = _normalize_domain(base)
+    try:
+        base = re.sub(r"\.[^.]+$", "", domain)
+        norm = _normalize_domain(base)
 
-    for brand in _BRAND_NAMES:
-        # Exact match after normalisation (e.g. "paypa1" → "paypal")
-        if normalised == brand:
-            return True
-        # Brand name buried in a longer domain (e.g. "paypal-secure.xyz")
-        if brand in normalised and normalised != brand:
-            return True
+        for brand in _BRAND_NAMES:
+            if norm == brand or (brand in norm and norm != brand):
+                return True
+    except Exception:
+        pass
+
     return False
 
 
 def _detect_url_patterns(raw: str) -> list[str]:
-    flags: list[str] = []
-    domain = _extract_domain(raw)
+    flags = []
 
-    # Suspicious TLD
-    for tld in _SUSPICIOUS_TLDS:
-        if domain.endswith(tld):
-            flags.append(f"Suspicious top-level domain: {tld}")
-            break
+    try:
+        domain = _extract_domain(raw)
+        full = raw.lower()
 
-    # Excessive hyphens (≥ 3 in the domain label)
-    labels = domain.split(".")
-    for label in labels:
-        if label.count("-") >= 3:
-            flags.append("Domain contains excessive hyphens — common in phishing URLs")
-            break
+        # Suspicious TLD
+        if any(domain.endswith(tld) for tld in _SUSPICIOUS_TLDS):
+            flags.append("Suspicious top-level domain")
 
-    # Suspicious keywords in domain or path
-    full_lower = raw.lower()
-    for kw in _PHISHING_KEYWORDS:
-        if re.search(rf"\b{kw}\b", full_lower):
-            flags.append(f"Phishing keyword detected in URL: '{kw}'")
-            break   # report only the first match to avoid noise
+        # Too many hyphens
+        if any(label.count("-") >= 3 for label in domain.split(".")):
+            flags.append("Excessive hyphens in domain")
 
-    # Typosquatting / homoglyph impersonation
-    if _is_typosquat(domain):
-        flags.append(f"Possible brand impersonation / typosquatting: {domain}")
+        # Keywords
+        if any(kw in full for kw in _PHISHING_KEYWORDS):
+            flags.append("Phishing keyword detected")
 
-    # IP address used as hostname (direct-IP phishing)
-    if re.match(r"^\d{1,3}(\.\d{1,3}){3}(:\d+)?$", domain):
-        flags.append("URL uses a raw IP address instead of a domain name")
+        # Typosquatting
+        if _is_typosquat(domain):
+            flags.append("Possible brand impersonation")
 
-    # Extremely long subdomain chains (≥ 5 dots in hostname)
-    if domain.count(".") >= 5:
-        flags.append("Domain has an unusually deep subdomain structure")
+        # Raw IP
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}", domain):
+            flags.append("Uses IP address instead of domain")
 
-    # HTTP (not HTTPS) for a login/payment-related URL
-    scheme = raw.split("://")[0].lower() if "://" in raw else "http"
-    if scheme == "http":
-        for kw in {"login", "verify", "secure", "account", "banking", "password"}:
-            if kw in full_lower:
-                flags.append("Sensitive operation over unencrypted HTTP connection")
-                break
+        # Deep subdomain
+        if domain.count(".") >= 5:
+            flags.append("Unusual subdomain depth")
+
+        # HTTP + sensitive keywords
+        if raw.startswith("http://") and any(
+            kw in full for kw in {"login", "secure", "account"}
+        ):
+            flags.append("Sensitive action over HTTP")
+
+    except Exception as e:
+        logger.error("URL detection failed: %s", e)
 
     return flags
 
 
-# ── Phone number patterns ──────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Phone Detection
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Country codes associated with high volumes of spam / scam calls
-_HIGH_RISK_COUNTRY_CODES: set[str] = {
-    "+234",  # Nigeria
-    "+91",   # India (high scam call volume)
-    "+62",   # Indonesia
-    "+55",   # Brazil
-    "+880",  # Bangladesh
-    "+92",   # Pakistan
-    "+7",    # Russia
-}
+_HIGH_RISK_CODES = {"+234", "+91", "+92", "+880", "+7"}
 
 
 def _detect_phone_patterns(raw: str) -> list[str]:
-    flags: list[str] = []
-    digits_only = re.sub(r"[^\d+]", "", raw)
+    flags = []
 
-    # Validate approximate length
-    digit_count = len(re.sub(r"\D", "", digits_only))
-    if digit_count < 7 or digit_count > 15:
-        flags.append("Phone number length is invalid (outside 7–15 digit range)")
+    try:
+        digits = re.sub(r"[^\d+]", "", raw)
+        count = len(re.sub(r"\D", "", digits))
 
-    # High-risk country code prefix
-    for code in _HIGH_RISK_COUNTRY_CODES:
-        if digits_only.startswith(code):
-            flags.append(f"Phone number originates from a high-risk country code: {code}")
-            break
+        if count < 7 or count > 15:
+            flags.append("Invalid phone length")
 
-    # Repeating digit patterns common in fake/test numbers
-    if re.search(r"(\d)\1{6,}", digits_only):
-        flags.append("Phone number contains a suspicious repeating digit pattern")
+        if any(digits.startswith(code) for code in _HIGH_RISK_CODES):
+            flags.append("High-risk country code")
+
+        if re.search(r"(\d)\1{6,}", digits):
+            flags.append("Repeating digits pattern")
+
+    except Exception as e:
+        logger.error("Phone detection failed: %s", e)
 
     return flags
 
 
-# ── Email patterns ─────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Email Detection
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Free email providers whose domains are commonly spoofed
-_FREE_PROVIDERS: set[str] = {
-    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
-    "live.com", "icloud.com", "protonmail.com", "mail.com",
-}
-
-# Well-known brands that phishers mimic in email domains
-_EMAIL_BRAND_DOMAINS: set[str] = {
-    "paypal", "apple", "amazon", "google", "microsoft",
-    "netflix", "facebook", "twitter", "instagram", "ebay",
-    "support", "admin", "noreply", "service",
+_FREE_PROVIDERS = {
+    "gmail.com", "yahoo.com", "outlook.com", "hotmail.com"
 }
 
 
 def _detect_email_patterns(raw: str) -> list[str]:
-    flags: list[str] = []
+    flags = []
 
-    parts = raw.lower().split("@")
-    if len(parts) != 2:
-        flags.append("Email address format is invalid")
-        return flags
+    try:
+        local, domain = raw.lower().split("@")
 
-    local_part, domain = parts
+        norm = _normalize_domain(domain)
 
-    # Spoofed free-provider domain (e.g. "gmai1.com" instead of "gmail.com")
-    normalised_domain = _normalize_domain(domain)
-    for provider in _FREE_PROVIDERS:
-        provider_base = provider.split(".")[0]
-        if (
-            normalised_domain == provider           # exact homoglyph match
-            or (provider_base in normalised_domain and normalised_domain != provider)
-        ):
-            flags.append(
-                f"Email domain may be impersonating a free provider: {domain}"
-            )
-            break
+        # Free provider spoof
+        if any(p.split(".")[0] in norm for p in _FREE_PROVIDERS):
+            if domain not in _FREE_PROVIDERS:
+                flags.append("Possible email provider impersonation")
 
-    # Brand name in domain that doesn't match official domain (e.g. apple-support.net)
-    if _is_typosquat(domain):
-        flags.append(f"Email domain appears to impersonate a well-known brand: {domain}")
+        # Brand impersonation
+        if _is_typosquat(domain):
+            flags.append("Brand impersonation in email")
 
-    # Suspicious local part keywords
-    for kw in {"admin", "support", "noreply", "billing", "verify", "secure"}:
-        if kw in local_part:
-            flags.append(f"Email local part contains a suspicious keyword: '{kw}'")
-            break
+        # Suspicious local part
+        if any(kw in local for kw in {"admin", "support", "verify"}):
+            flags.append("Suspicious email prefix")
 
-    # Excessive dots or hyphens in local part (obfuscation tactic)
-    if local_part.count(".") >= 4 or local_part.count("-") >= 3:
-        flags.append("Email local part contains unusual punctuation — possible obfuscation")
+        # Obfuscation
+        if local.count(".") >= 4 or local.count("-") >= 3:
+            flags.append("Obfuscated email format")
+
+    except Exception as e:
+        logger.error("Email detection failed: %s", e)
+        flags.append("Invalid email format")
 
     return flags
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────────────
 
 def detect_patterns(raw: str, input_type: str) -> list[str]:
     """
-    Dispatch to the appropriate rule-set and return a list of flag strings.
-    An empty list means no suspicious patterns were detected.
+    Main dispatcher.
     """
-    if input_type == "url":
-        return _detect_url_patterns(raw)
-    if input_type == "phone":
-        return _detect_phone_patterns(raw)
-    if input_type == "email":
-        return _detect_email_patterns(raw)
+    try:
+        if input_type == "url":
+            return _detect_url_patterns(raw)
+
+        if input_type == "phone":
+            return _detect_phone_patterns(raw)
+
+        if input_type == "email":
+            return _detect_email_patterns(raw)
+
+    except Exception as e:
+        logger.error("Pattern detection failed: %s", e)
+
     return []
