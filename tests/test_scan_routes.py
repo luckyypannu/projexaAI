@@ -12,7 +12,7 @@ CHANGES:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import sys
 import os
@@ -80,17 +80,17 @@ class TestScanSuccess:
     def _post_scan(self, client, input_value: str):
         return client.post("/scan", json={"input": input_value})
 
-    @patch("routes.scan_routes._run_async")
+    @patch("routes.scan_routes.run_api_checks")
     @patch("routes.scan_routes.get_collection")
-    def test_url_scan_returns_correct_shape(self, mock_get_col, mock_run, client):
+    def test_url_scan_returns_correct_shape(self, mock_get_col, mock_api_checks, client):
         """Response must contain all six required keys including pattern_flags."""
         mock_col = MagicMock()
         mock_col.find_one.return_value = None
         mock_col.count_documents.return_value = 0
         mock_col.update_one.return_value = None
         mock_get_col.return_value = mock_col
-        # URLhaus clean response
-        mock_run.return_value = {
+        # URLhaus clean response - use AsyncMock for async function
+        mock_api_checks.return_value = {
             "urlhaus": {"found": False, "url_status": "", "threat": "", "tags": [], "query_status": "no_results"}
         }
 
@@ -100,29 +100,29 @@ class TestScanSuccess:
         for key in ("input", "type", "trust_score", "risk_level", "advice", "pattern_flags"):
             assert key in data, f"Key '{key}' missing from response"
 
-    @patch("routes.scan_routes._run_async")
+    @patch("routes.scan_routes.run_api_checks")
     @patch("routes.scan_routes.get_collection")
-    def test_score_within_range(self, mock_get_col, mock_run, client):
+    def test_score_within_range(self, mock_get_col, mock_api_checks, client):
         mock_col = MagicMock()
         mock_col.find_one.return_value = None
         mock_col.count_documents.return_value = 0
         mock_col.update_one.return_value = None
         mock_get_col.return_value = mock_col
-        mock_run.return_value = {}
+        mock_api_checks.return_value = {}
 
         resp = self._post_scan(client, "https://google.com")
         data = resp.get_json()
         assert 0 <= data["trust_score"] <= 100
 
-    @patch("routes.scan_routes._run_async")
+    @patch("routes.scan_routes.run_api_checks")
     @patch("routes.scan_routes.get_collection")
-    def test_risk_level_valid_value(self, mock_get_col, mock_run, client):
+    def test_risk_level_valid_value(self, mock_get_col, mock_api_checks, client):
         mock_col = MagicMock()
         mock_col.find_one.return_value = None
         mock_col.count_documents.return_value = 0
         mock_col.update_one.return_value = None
         mock_get_col.return_value = mock_col
-        mock_run.return_value = {}
+        mock_api_checks.return_value = {}
 
         resp = self._post_scan(client, "http://paypa1.xyz/login")
         data = resp.get_json()
@@ -144,21 +144,21 @@ class TestScanSuccess:
         mock_col.find_one.return_value = cached_doc
         mock_get_col.return_value = mock_col
 
-        with patch("routes.scan_routes._run_async") as mock_run:
+        with patch("routes.scan_routes.run_api_checks") as mock_api_checks:
             resp = self._post_scan(client, "http://cached.com")
-            mock_run.assert_not_called()
+            mock_api_checks.assert_not_called()
 
         assert resp.status_code == 200
 
-    @patch("routes.scan_routes._run_async")
+    @patch("routes.scan_routes.run_api_checks")
     @patch("routes.scan_routes.get_collection")
-    def test_pattern_flags_is_list(self, mock_get_col, mock_run, client):
+    def test_pattern_flags_is_list(self, mock_get_col, mock_api_checks, client):
         mock_col = MagicMock()
         mock_col.find_one.return_value = None
         mock_col.count_documents.return_value = 0
         mock_col.update_one.return_value = None
         mock_get_col.return_value = mock_col
-        mock_run.return_value = {}
+        mock_api_checks.return_value = {}
 
         resp = self._post_scan(client, "http://example.com")
         data = resp.get_json()

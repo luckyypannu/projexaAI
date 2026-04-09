@@ -5,6 +5,11 @@ import sys
 import os
 import types
 
+# Set environment variables for testing BEFORE any application imports
+os.environ["FLASK_DEBUG"] = "true"
+os.environ["MONGO_URI"] = "mongodb://localhost:27017/test_db"
+os.environ["SECRET_KEY"] = "test-secret-key"
+
 # Ensure project root is importable
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -44,9 +49,15 @@ if "pymongo" not in sys.modules:
     database_mod = types.ModuleType("pymongo.database")
     database_mod.Database = object
 
+    errors_mod = types.ModuleType("pymongo.errors")
+    class ServerSelectionTimeoutError(Exception):
+        pass
+    errors_mod.ServerSelectionTimeoutError = ServerSelectionTimeoutError
+
     sys.modules["pymongo"] = pymongo_mod
     sys.modules["pymongo.collection"] = collection_mod
     sys.modules["pymongo.database"] = database_mod
+    sys.modules["pymongo.errors"] = errors_mod
 
 # ── Stub: flask_cors ───────────────────────────────────────────────────────────
 if "flask_cors" not in sys.modules:

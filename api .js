@@ -1,52 +1,56 @@
 /**
- * api.js — TrustTrace Backend Communication
- *
- * FIXES APPLIED:
- *   [1] BASE_URL now reads from CONFIG.API_BASE (defined in config.js)
- *       instead of being hardcoded. config.js must be loaded first in HTML.
- *
- * Why this file works for all 3 input types (url, phone, email):
- *   Backend receives:  { "input": "whatever the user typed" }
- *   Backend's classify_input() in pattern_detector.py
- *   automatically detects whether it is a URL, phone, or email.
- *
- * BACKEND ENDPOINT REFERENCE:
- *   URL:     CONFIG.API_BASE + /scan
- *   Method:  POST
- *   Headers: Content-Type: application/json
- *   Body:    { "input": "<user value>" }
- *
- * BACKEND RESPONSE FIELDS (exact names from scan_routes.py):
- *   input          → string  — the scanned value
- *   type           → string  — "url" | "phone" | "email"
- *   trust_score    → integer — 0 to 100
- *   risk_level     → string  — "Low" | "Medium" | "High"
- *   pattern_flags  → array   — list of threat flag strings
- *   advice         → array   — list of advice strings
+ * api.js — TrustTrace Backend Communication (FINAL VERSION)
  */
 
-// FIX: was hardcoded 'http://localhost:5000' — now reads from config.js
+// Base URL (from config.js)
 const BASE_URL = (typeof CONFIG !== 'undefined' && CONFIG.API_BASE)
   ? CONFIG.API_BASE
-  : 'http://localhost:5000'; // fallback in case config.js fails to load
+  : 'http://localhost:5000';
+
+
+/**
+ * Helper: fetch with timeout
+ */
+async function fetchWithTimeout(url, options = {}, timeout = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 
 /**
  * scanApi(value)
- * Sends user input to backend /scan endpoint.
- * Works for URL, phone, AND email — backend classifies automatically.
- *
- * @param {string} value — raw trimmed input from the text field
- * @returns {object}     — raw backend response
- * @throws  {Error}      — on network failure or HTTP error
  */
 async function scanApi(value) {
-  const response = await fetch(BASE_URL + '/scan', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ input: value.trim() }),
-  });
+  if (!value || !value.trim()) {
+    throw new Error("Input cannot be empty");
+  }
+
+  let response;
+
+  try {
+    response = await fetchWithTimeout(BASE_URL + '/scan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ input: value.trim() }),
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error("Request timed out. Server is slow.");
+    }
+    throw new Error("Network error. Check if backend is running.");
+  }
 
   if (!response.ok) {
     let msg = `Server error: ${response.status}`;
@@ -60,22 +64,25 @@ async function scanApi(value) {
   return response.json();
 }
 
+
 /**
- * reportApi(value)
- * Submits a user report to /report endpoint.
- * Works for all three input types.
- *
- * @param {string} value  — the input being reported
- * @param {string} reason — optional reason string
+ * reportApi(value, reason)
  */
 async function reportApi(value, reason = 'Reported by user') {
+  if (!value || !value.trim()) return;
+
   try {
-    await fetch(BASE_URL + '/report', {
+    await fetchWithTimeout(BASE_URL + '/report', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input: value.trim(), reason }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: value.trim(),
+        reason,
+      }),
     });
   } catch (_) {
-    // Non-critical — do not block UI if report fails
+    // Silent fail (non-critical)
   }
 }
