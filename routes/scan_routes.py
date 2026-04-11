@@ -19,6 +19,7 @@ Features
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, current_app
@@ -29,6 +30,7 @@ from services.async_api_checker import run_api_checks
 from services.pattern_detector import detect_patterns, classify_input
 from services.trust_score_engine import calculate_score
 from services.advice_generator import generate_advice
+from services.demo_mode import generate_demo_result
 
 logger = logging.getLogger(__name__)
 scan_bp = Blueprint("scan", __name__)
@@ -93,8 +95,23 @@ def scan():
     input_type = classify_input(raw_input)
     logger.info("Scan started | type=%s | input=%s", input_type, raw_input)
 
+    # Demo mode: Return mock results when database unavailable
+    demo_mode = current_app.config.get("DEMO_MODE", False)
+    if not demo_mode:
+        demo_mode = os.getenv("DEMO_MODE", "false").lower() == "true"
+    logger.debug("Demo mode check | config=%s | env=%s", current_app.config.get("DEMO_MODE", False), os.getenv("DEMO_MODE", "false"))
+
+    if demo_mode:
+        logger.info("Demo mode enabled — returning generated result")
+        result = generate_demo_result(raw_input, input_type)
+        return jsonify(result.to_response()), 200
+
     # 2. Cache lookup
     cache_col = get_collection(current_app.config["COLLECTION_CACHED"])
+
+    if not cache_col:
+        logger.error("Database unavailable — cannot perform scan")
+        return jsonify({"error": "Database service unavailable. Please try again later."}), 503
 
     try:
         cached = cache_col.find_one({"input": raw_input})

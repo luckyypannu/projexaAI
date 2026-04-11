@@ -6,6 +6,7 @@ once at startup for fast cached-result lookups.
 """
 
 import logging
+import time
 from flask import Flask
 from pymongo import MongoClient, ASCENDING
 from pymongo.collection import Collection
@@ -23,44 +24,65 @@ def init_db(app: Flask) -> None:
     """
     Called once during app startup.
     Creates the MongoClient, stores references, and provisions indexes.
+    Includes retry logic for Docker container startup timing.
     """
     global _client, _db
 
+    if app.config.get("DEMO_MODE", False):
+        logger.info("Demo mode enabled — skipping MongoDB initialization.")
+        return
+
     mongo_uri: str = app.config["MONGO_URI"]
+    max_retries = 10
+    retry_delay = 3  # seconds
 
-    try:
-        _client = MongoClient(
-            mongo_uri,
-            serverSelectionTimeoutMS=5000,
-        )
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Attempting MongoDB connection (attempt {attempt + 1}/{max_retries})...")
 
-        # Force connection check
-        _client.admin.command("ping")
+            _client = MongoClient(
+                mongo_uri,
+                serverSelectionTimeoutMS=5000,
+            )
 
-        _db = _client.get_default_database()
+            # Force connection check
+            _client.admin.command("ping")
 
-        if _db is None:
-            raise RuntimeError("❌ No default database selected in MONGO_URI")
+            _db = _client.get_default_database()
 
-        _create_indexes(app)
+            if _db is None:
+                raise RuntimeError("❌ No default database selected in MONGO_URI")
 
-        logger.info("✅ MongoDB connected and indexes ensured.")
+            _create_indexes(app)
 
-    except ServerSelectionTimeoutError as e:
-        logger.error("❌ MongoDB connection failed: %s", e)
-        raise RuntimeError("MongoDB is not reachable")
+            logger.info("✅ MongoDB connected and indexes ensured.")
+            return
+
+        except ServerSelectionTimeoutError as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"❌ MongoDB connection failed (attempt {attempt + 1}): {e}. Retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+            else:
+                logger.error(f"❌ MongoDB connection failed after {max_retries} attempts: {e}")
+                logger.warning("⚠️  Starting in FALLBACK mode (no database, scanning disabled)")
+                # Don't raise — allow Flask to start without MongoDB
 
 
 def get_db() -> Database:
     """Return the active database instance. Must call init_db() first."""
     if _db is None:
-        raise RuntimeError("❌ Database not initialised. Call init_db() first.")
+        logger.warning("❌ Database not initialised — returning None in fallback mode")
+        return None
     return _db
 
 
 def get_collection(name: str) -> Collection:
-    """Convenience helper — returns a named collection from the active DB."""
-    return get_db()[name]
+    """Convenience helper — returns a named collection from the active DB. Returns None if DB unavailable."""
+    db = get_db()
+    if db is None:
+        logger.warning(f"Collection '{name}' requested but database is unavailable")
+        return None
+    return db[name]
 
 
 def close_db() -> None:

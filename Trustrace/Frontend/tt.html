@@ -1,163 +1,247 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>TrustTrace – Online Scam Detection System</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="tt.css">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
 </head>
-
 <body>
 
-<header>
-<div class="logo">TrustTrace<span class="logo-dot"></span></div>
-</header>
+<!-- BG -->
+<div class="bg">
+  <div class="bg-g"></div>
+  <div class="bg-grid"></div>
+  <div class="orb o1"></div>
+  <div class="orb o2"></div>
+  <div class="orb o3"></div>
+</div>
 
-<section class="hero">
+<!-- NAV -->
+<nav>
+  <div class="nb">
+    <div class="nl">🛡️</div>
+    <span class="nn">TrustTrace</span>
+  </div>
+  <div class="nls">
+    <a href="#home">Home</a>
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#about">About</a>
+    <a href="#contact" class="ncta">Contact Us</a>
+  </div>
+  <button class="ham" id="ham" aria-label="Menu"><span></span><span></span><span></span></button>
+</nav>
+<div class="nmob" id="nmob">
+  <a href="#home"         onclick="cn()">Home</a>
+  <a href="#features"     onclick="cn()">Features</a>
+  <a href="#how-it-works" onclick="cn()">How It Works</a>
+  <a href="#about"        onclick="cn()">About</a>
+  <a href="#contact"      onclick="cn()" class="ncta">Contact Us</a>
+</div>
 
-<div class="badge">🛡️ Scam Detection System</div>
+<!-- PAGE -->
+<div class="pg">
 
-<h1>
-Is it safe? <br>
-<span>Let's find out.</span>
-</h1>
+<!-- HERO -->
+<section class="hero" id="home">
+  <div class="oring" aria-hidden="true">
+    <div class="oc">
+      <div class="oi" style="top:-29px;left:50%;margin-left:-29px;">🔒</div>
+      <div class="oi" style="bottom:-29px;left:50%;margin-left:-29px;">📞</div>
+      <div class="oi" style="left:-29px;top:50%;margin-top:-29px;">🔗</div>
+      <div class="oi" style="right:-29px;top:50%;margin-top:-29px;">🛡️</div>
+      <div class="odot"></div>
+    </div>
+  </div>
 
-<p>
-Check website URLs or phone numbers to verify their trust score and risk level instantly.
-</p>
+  <div class="hbadge"><div class="bd"></div>AI-Powered Scam Detection</div>
+  <h1 class="h1">Your Security,<br><span>Our Commitment!</span></h1>
+  <p class="hsub">Check website URLs, phone numbers, or email addresses to verify their trust score and risk level using real-time threat intelligence.</p>
 
+  <!-- CHECK CARD -->
+  <div class="cc" id="card">
+    <div class="cct">🔍 TRUST VERIFICATION</div>
+    <p class="ccs">Select input type and analyze in seconds</p>
+
+    <!--
+      FIX: Added third radio option for Email.
+      Backend classify_input() returns "url" | "phone" | "email"
+      All three must be selectable from the UI.
+      id="te" value="email" — matches backend "email" type exactly.
+    -->
+    <div class="tt">
+      <input type="radio" name="ct" id="tu" value="url" checked>
+      <label for="tu">🔗 Website URL</label>
+      <input type="radio" name="ct" id="tp" value="phone">
+      <label for="tp">📞 Phone Number</label>
+      <input type="radio" name="ct" id="te" value="email">
+      <label for="te">✉️ Email Address</label>
+    </div>
+
+    <div class="iw">
+      <span class="ii" id="ico">🌐</span>
+      <input class="mi" id="inp" type="text" autocomplete="off" placeholder="Enter website URL (e.g., example.com)">
+      <div class="em" id="emsg"></div>
+    </div>
+
+    <button class="cbtn" id="cbtn" onclick="go()">⚡ CHECK TRUST SCORE</button>
+
+    <div class="lb" id="lb">
+      <div class="sp"></div>
+      <div class="sl">ANALYZING THREAT LEVEL...</div>
+    </div>
+    <div class="ae" id="ae">❌ Unable to analyze. Please try again later.</div>
+  </div>
 </section>
 
-
-<div class="main-wrapper">
-
-<div class="card">
-
-<div class="type-label">What are you checking?</div>
-
-<div class="type-toggle">
-
-<button class="type-btn active" id="btn-url" onclick="setType('url')">
-🔗 Website URL
-</button>
-
-<button class="type-btn" id="btn-phone" onclick="setType('phone')">
-📞 Phone Number
-</button>
-
+<!-- RESULT -->
+<div id="rs">
+  <div class="rc">
+    <div class="rh">
+      <div>
+        <div class="rl">🔎 ANALYSIS COMPLETE</div>
+        <div class="rsub" id="rsub"></div>
+      </div>
+      <div id="rhb"></div>
+    </div>
+    <div class="rb">
+      <!-- Score -->
+      <div class="sb">
+        <div class="sr">
+          <svg viewBox="0 0 110 110">
+            <circle class="rbg" cx="55" cy="55" r="50"/>
+            <circle class="rf" id="rfill" cx="55" cy="55" r="50"/>
+          </svg>
+          <div class="sn"><span id="sv">--</span><small>/ 100</small></div>
+        </div>
+        <div class="si">
+          <div id="rpill"></div>
+          <h3 id="stitle"></h3>
+          <div class="bw"><div class="bb"><div class="bf" id="bfill"></div></div></div>
+          <p id="scap" style="margin-top:.5rem;font-size:.83rem;color:var(--txt2);"></p>
+        </div>
+      </div>
+      <!-- Indicators -->
+      <div>
+        <div class="sh">Risk Indicators</div>
+        <ul class="il" id="ilist"></ul>
+      </div>
+      <!-- Explanation -->
+      <div>
+        <div class="sh">Analysis Summary</div>
+        <div class="eb" id="ebox"></div>
+      </div>
+    </div>
+  </div>
+  <button class="rbtn" onclick="reset()">🔄 Check Another</button>
 </div>
 
+<!-- FEATURES -->
+<section class="sec" id="features">
+  <div class="inn">
+    <h2 class="st">Why Choose TrustTrace?</h2>
+    <p class="ss">Multi-layer protection powered by real-time intelligence databases</p>
+    <div class="fg">
+      <div class="fc"><div class="fi">🛡️</div><h3>Real-Time Scanning</h3><p>Instantly cross-references live blacklists, SSL data, and WHOIS records for accurate results.</p></div>
+      <div class="fc"><div class="fi">🧠</div><h3>AI Trust Scoring</h3><p>Machine learning weighs 80+ risk signals to produce a precise 0–100 trust score.</p></div>
+      <div class="fc"><div class="fi">📊</div><h3>Visual Reports</h3><p>Clear dashboards with progress meters, indicator checklists, and plain-language summaries.</p></div>
+      <div class="fc"><div class="fi">📞</div><h3>Phone Verification</h3><p>Check numbers against global scam registries and carrier fraud intelligence databases.</p></div>
+      <div class="fc"><div class="fi">✉️</div><h3>Email Analysis</h3><p>Detect spoofed domains, brand impersonation, and phishing patterns in email addresses.</p></div>
+      <div class="fc"><div class="fi">🔒</div><h3>Zero-Log Privacy</h3><p>Your searches are encrypted and never stored or shared with any third party.</p></div>
+    </div>
+  </div>
+</section>
 
-<div class="input-wrap">
+<!-- HOW IT WORKS -->
+<section class="sec" id="how-it-works">
+  <div class="inn">
+    <h2 class="st">How It Works</h2>
+    <p class="ss">Four steps from input to insight</p>
+    <div class="hg">
+      <div class="hc"><span class="hn">01</span><h4>Input</h4><p>Paste any URL, phone number, or email address into the verification field.</p></div>
+      <div class="hc"><span class="hn">02</span><h4>Scan</h4><p>AI queries 50+ live threat intelligence and blacklist databases.</p></div>
+      <div class="hc"><span class="hn">03</span><h4>Score</h4><p>Risk factors are weighted and compiled into a trust score (0–100).</p></div>
+      <div class="hc"><span class="hn">04</span><h4>Report</h4><p>Visual breakdown with actionable safety recommendations delivered instantly.</p></div>
+    </div>
+  </div>
+</section>
 
-<input
-type="text"
-id="main-input"
-placeholder="Enter website URL (e.g., example.com)"
-autocomplete="off"
-/>
+<!-- ABOUT -->
+<section class="sec" id="about">
+  <div class="aw">
+    <h2 class="st">About TrustTrace</h2>
+    <div class="stats">
+      <div class="sn2"><span>2M+</span><div>Checks Performed</div></div>
+      <div class="sn2"><span>99.2%</span><div>Detection Accuracy</div></div>
+      <div class="sn2"><span>50+</span><div>Threat Databases</div></div>
+      <div class="sn2"><span>&lt;3s</span><div>Avg Response Time</div></div>
+    </div>
+    <p class="atext">TrustTrace leads the mission for a safer digital ecosystem. We combine real-time threat intelligence, domain reputation analysis, SSL verification, and AI-driven pattern recognition to protect everyday users from phishing, scam websites, fraudulent phone schemes, and malicious email addresses. Our system processes millions of verification requests daily, staying ahead of emerging threats so you never have to second-guess what you click or who you answer.</p>
+  </div>
+</section>
 
-</div>
+<!-- CONTACT -->
+<section class="sec" id="contact">
+  <div class="cw">
+    <h2 class="st">Get In Touch</h2>
+    <p class="ss">Questions, partnerships, or API access — we're here.</p>
+    <!-- <div class="cf">
+      <input class="ci" type="text"  placeholder="Your name" />
+      <input class="ci" type="email" placeholder="Your email address" />
+      <textarea class="ci" rows="4"  placeholder="Your message..."></textarea>
+      <button class="cb">📨 SEND MESSAGE</button>
+    </div> -->
+    <div class="cf">
+      <input class="ci" id="cname" type="text"  placeholder="Your name" />
+      <input class="ci" id="cemail" type="email" placeholder="Your email address" />
+      <textarea class="ci" id="cmsg" rows="4"  placeholder="Your message..."></textarea>
+      <button class="cb" id="csend" onclick="sendContact()">📨 SEND MESSAGE</button>
+    </div>
+    <div id="cok" style="display:none;margin-top:1rem;color:var(--green);font-weight:600;text-align:center;">
+      ✅ Message received! We'll be in touch soon.
+    </div>
+  </div>
+</section>
 
-<div class="error-msg" id="error-msg"></div>
-
-<button class="btn-check" id="check-btn" onclick="handleCheck()">
-Check Trust →
-</button>
-
-
-<div class="loading" id="loading">
-
-<div class="spinner"></div>
-<span>Analyzing… this may take a moment</span>
-
-</div>
-
-
-<div class="error-box" id="api-error">
-⚠️ Unable to analyze. Please try again later.
-</div>
-
-
-<div class="result-section" id="result-section">
-
-<div class="result-divider"></div>
-
-<div class="score-wrap">
-
-<div class="score-ring">
-
-<svg width="80" height="80" viewBox="0 0 80 80">
-
-<circle class="bg" cx="40" cy="40" r="33"></circle>
-
-<circle
-class="fg"
-id="ring-fg"
-cx="40"
-cy="40"
-r="33"
-stroke-dasharray="207.3"
-stroke-dashoffset="207.3">
-</circle>
-
-</svg>
-
-<div class="score-num" id="score-num">0</div>
-
-</div>
-
-
-<div class="score-info">
-
-<div class="trust-label" id="trust-label"></div>
-
-<h3 id="result-title"></h3>
-
-<p id="result-subtitle"></p>
-
-</div>
-
-</div>
-
-
-<div class="progress-bar-wrap">
-
-<div class="progress-bar-track">
-
-<div class="progress-bar-fill" id="progress-fill"></div>
-
-</div>
-
-</div>
-
-
-<div class="indicators-title">Risk Indicators</div>
-
-<div class="indicators-list" id="indicators-list"></div>
-
-<div class="explanation" id="explanation"></div>
-
-<button class="btn-reset" onclick="resetForm()">↩ Check Another</button>
-
-</div>
-
-</div>
-
-</div>
-
-
+<!-- FOOTER -->
 <footer>
-Built for safety & trust.
-<span>TrustTrace</span> — Online Scam Detection System
+  <div class="fg3">
+    <div class="fb">
+      <div class="nb"><div class="nl" style="width:36px;height:36px;font-size:1.1rem;">🛡️</div><span class="nn">TrustTrace</span></div>
+      <p>Protecting people from online scams through intelligent, real-time threat detection.</p>
+    </div>
+    <div class="fco">
+      <h4>Product</h4>
+      <ul>
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#">API Docs</a></li>
+      </ul>
+    </div>
+    <div class="fco">
+      <h4>Company</h4>
+      <ul>
+        <li><a href="#about">About</a></li>
+        <li><a href="#contact">Contact</a></li>
+        <li><a href="#">Privacy Policy</a></li>
+        <li><a href="#">Terms of Use</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="fbot"><strong>TrustTrace</strong> &nbsp;©&nbsp;2025 · Built for a safer internet · All rights reserved</div>
 </footer>
 
+</div>
 
-<script src="script.js"></script>
+<script src="config.js"></script>
+<script src="nav.js"></script>
+<script src="inputToggle.js"></script>
+<script src="validation.js"></script>
+<script src="api.js"></script>
+<script src="renderer.js"></script>
+<script src="main.js"></script>
 </body>
 </html>

@@ -1,38 +1,42 @@
-version: "3.9"
-
 services:
 
-  # ── MongoDB ────────────────────────────────────────────────────────────────
   mongo:
     image: mongo:7.0
+    container_name: cybertrust_mongo
     restart: always
     volumes:
       - mongo_data:/data/db
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_DATABASE: cybertrust
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "-u", "admin", "-p", "password", "--authenticationDatabase", "admin", "--eval", "db.runCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
 
-  # ── Backend ────────────────────────────────────────────────────────────────
   backend:
+    image: cybertrust_backend
     build: .
+    container_name: cybertrust_backend
     restart: always
     ports:
       - "5000:5000"
     depends_on:
       mongo:
         condition: service_healthy
-    env_file:
-      - .env
     environment:
-      MONGO_URI: mongodb://admin:password@mongo:27017/cybertrust?authSource=admin
-      PYTHONUNBUFFERED: 1
+      MONGO_URI: mongodb://admin:password@cybertrust_mongo:27017/cybertrust?authSource=admin
+      SECRET_KEY: trustack-secret-key-2024-xk9mP2qL
+      DEMO_MODE: "true"
+      FLASK_ENV: "development"
+      FLASK_DEBUG: "false"
+      CORS_ORIGINS: "*"
+      CACHE_TTL_SECONDS: "86400"
+      INGESTION_INTERVAL_HOURS: "24"
+      OPENPHISH_FEED_URL: https://openphish.com/feed.txt
+      PYTHONUNBUFFERED: "1"
 
 volumes:
   mongo_data:

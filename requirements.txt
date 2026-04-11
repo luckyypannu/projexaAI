@@ -9,7 +9,7 @@ flask-cors==4.0.1
 pymongo==4.7.3
 
 # Async HTTP client (for parallel API calls)
-aiohttp==3.9.5
+aiohttp==3.13.5
 
 # Background scheduler (24-hour data ingestion job)
 APScheduler==3.10.4
